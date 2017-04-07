@@ -1,0 +1,307 @@
+---
+title: "Practical Machine Learning Project: Exercise Class Prediction"
+author: "Dean Woodley"
+date: "April 4, 2017"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+##Exercise Class Prediction  
+##Introduction  
+This paper presents the results of the development and selection of a model to predict
+the which of five classes of exercises were performed by six test subjects. The subjects were asked to perform barbell lifts correctly and incorrectly in five different ways. The data was provided by groupware@les.inf.puc-rio.br at this internet address: http://groupware.les.inf.puc-rio.br/har.
+
+
+##Data Preparation  
+The provided training data file consisted of 19,622 rows of observations with 
+160 columns of potenetial prediction and identifying variables. The training data 
+was randomly split on the classe feature between a training set (75%) and a testing set (25%).
+
+Preliminary examination of the data indicated that a large number of the 
+variables predominately contained NA or near zero variance values. Columns that 
+contained over 50% NA values where removed from the final data sets, as were columns 
+that had near zero variances. In addition, columns containing row identifiers, 
+test subject names, and time stamps were removed. A total of 53 predictor columns
+remained after preprocessing.
+
+    
+##Model Selection and Cross Validation  
+Four (4) potenetial prediction methods were fitted to the preprocessed training data:    
+    Classification Tree Model (rpart);  
+    Random Forests Model (rf);  
+    Boosting with Trees Model (gbm);  
+    Bagging with Trees Model (treeebag)    
+
+Each model was fitted using k-fold (k = 5) cross validation with the intent to reduce variance
+of the fit. The fitted models were then used to predict against the training data in order to 
+obtain a best case estimate of model accuracy.
+
+The accuracy against the training data were as follow:  
+    Classification Tree Model (rpart):      50.14 %  
+    Random Forests Model (rf):             100    %  
+    Boosting with Trees Model (gbm):        99.46 %  
+    Bagging with Trees Model (treeebag):    99.99 %  
+        
+The Classification Tree Model was seen to be very much inferior to the other models
+tested, though the possibility of overfitting with the other models (particularly Random Forests)
+is a concern.
+
+As an additional check for accuracy, and the possibility of overfitting, the models 
+were used to predict against testing data that was held out from the original training set. 
+The prediction accuracy of the four models against the testing data was very close to 
+that of the training data, so the possibility of overfitting is assumed to be negligeable.
+
+The accuracy against the testing data were as follow:  
+    Classification Tree Model (rpart):      47.94 %  
+    Random Forests Model (rf):              99.9  %  
+    Boosting with Trees Model (gbm):        99.16 %  
+    Bagging with Trees Model (treeebag):    99.49 %  
+
+Given the results of the models against the training and testing data sets
+the Random Forest model was selected for the final validation prediction.    
+
+##Prediction Results  
+Predictions were performed on 20 test cases from the   "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" data file.  
+The results are as follows:  
+
+Case 1 : B  
+Case 2 : A  
+Case 3 : B  
+Case 4 : A  
+Case 5 : A  
+Case 6 : E  
+Case 7 : D  
+Case 8 : B  
+Case 9 : A  
+Case 10 : A  
+Case 11 : B  
+Case 12 : C  
+Case 13 : B  
+Case 14 : A  
+Case 15 : E  
+Case 16 : E  
+Case 17 : A  
+Case 18 : B  
+Case 19 : B  
+Case 20 : B  
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache=TRUE)
+library(gbm)
+library(caret)
+library(rattle)
+```
+
+##Data Preparation  
+####Load Training Files; Split between Training and Testing sets (75%/25%)  
+```{r,label="Load Training Data File", echo = TRUE}
+set.seed(1111)
+pmltrain <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+```
+
+```{r,label="Split Training Data File", echo = TRUE}
+trainList <- createDataPartition(pmltrain$classe,p=0.75,list=FALSE)
+trainData <- pmltrain[trainList,]
+TestData <- pmltrain[-trainList,]
+```
+####Input Data Frame Dimensions  
+```{r,label="pml-training.csv", echo = FALSE}
+print(dim(pmltrain))
+```
+
+####Training Data Frame Dimensions  
+```{r, echo = FALSE}
+print(dim(trainData))
+```
+
+####Testing Data Frame Dimensions  
+```{r, echo = FALSE}
+print(dim(TestData))
+```
+
+####Vector of columns that are near zero variance  
+```{r,label="Near Zero Variance", echo = TRUE}
+nms <- colnames(trainData[,nearZeroVar(trainData)])
+```
+
+
+####Vector of columns that are timestamps, row numbers or characters  
+```{r,label="Identifier columns", echo = TRUE}
+nms <- c(nms,"X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp")
+```
+
+####Vector of columns that are over 50% NAs  
+```{r,label="over 50% NAs", echo = TRUE}
+for(nm in colnames(trainData))
+{
+    if(sum(is.na(trainData[,nm]))/length(trainData[,nm]) > 0.50) 
+    {
+        nms <- c(nms,nm)
+    }
+}
+```
+
+####Remove columns that are NAs or near zero variance  
+```{r, label="Remove Unused Columns",echo = TRUE}
+NACols <- colnames(trainData) %in% nms
+trainData <- trainData[,!NACols]
+```
+
+####Revised Training Data Frame Dimensions:  
+```{r, echo = TRUE}
+print(dim(trainData))
+```
+
+
+##Train four models: Classification Tree, Random Forests, Boosting with Trees, Bagging  
+####Train Classification Tree Model (rpart)  
+```{r, label="Train Classification Tree",echo = TRUE}
+set.seed(1111)
+tc <- trainControl(method="CV",number=5)
+XtrainMod <- train(classe~.,method="rpart",trControl=tc,data=trainData) 
+```
+```{r, echo = FALSE}
+print(XtrainMod)
+```
+
+####Train Random Forests Model (rf)  
+```{r, label="Train Random Forest", echo = TRUE}
+XtrainMod2 <- train(classe~.,method="rf",trControl=tc,data=trainData)
+```
+```{r, echo = FALSE}
+print(XtrainMod2)
+```
+
+
+####Train Boosting with Trees Model (gbm)  
+```{r, label="Train Boosting Model", echo = TRUE}
+XtrainMod3 <- train(classe~.,method = "gbm",trControl=tc,data=trainData,verbose=FALSE)
+```
+```{r, echo = FALSE}
+print(XtrainMod3)
+```
+
+
+####Train Bagging Model (treebag)  
+```{r, label="Train Bagging Model", echo = TRUE}
+XtrainMod4 <- train(classe~.,method = "treebag",trControl=tc,data=trainData,verbose=FALSE) 
+```
+```{r, echo = FALSE}
+print(XtrainMod4)
+```
+
+##Check accuracy of each model against training data  
+####Test rpart (Classification Tree) on training data.  
+```{r, label="Predict Classification Tree, Training Data", echo = TRUE}
+RpartTrainPred <- predict(XtrainMod,newdata=trainData)
+table(cbind(data.frame(RpartTrainPred),data.frame(trainData$classe)))
+
+print(paste("Training Data Accuracy:",round(100*sum(RpartTrainPred == trainData$classe)/length(trainData$classe),2),"%"))
+```
+
+####Plot of rpart Classification Tree  
+```{r, label="Plot Classification Tree, Training Data", echo = FALSE}
+fancyRpartPlot(XtrainMod$finalModel,main="rpart Classification Tree\n",sub="")
+```
+
+####Test rf (Random Forest) on training data.  
+```{r, label="Predict Random Forest, Training Data", echo = TRUE}
+RfTrainPred <- predict(XtrainMod2,newdata=trainData)
+
+table(cbind(data.frame(RfTrainPred),data.frame(trainData$classe)))
+
+print(paste("Training Data Accuracy:",round(100*sum(RfTrainPred ==  trainData$classe)/length(trainData$classe),2),"%"))
+```
+
+####Test gbm (Boosting with Trees) on training data.  
+```{r, label="Predict Boosting, Training Data", echo = TRUE}
+GbmTrainPred <- predict(XtrainMod3,newdata=trainData)
+
+table(cbind(data.frame(GbmTrainPred),data.frame(trainData$classe)))
+
+print(paste("Training Data Accuracy:",round(100*sum(GbmTrainPred ==  trainData$classe)/length(trainData$classe),2),"%"))
+```
+
+####Test treeebag (Bagging with Trees) on training data.  
+```{r, label="Predict Bagging, Training Data", echo = TRUE}
+TreebagTrainPred <- predict(XtrainMod4,newdata=trainData)
+
+table(cbind(data.frame(TreebagTrainPred),data.frame(trainData$classe)))
+
+print(paste("Training Data Accuracy:",round(100*sum(TreebagTrainPred == trainData$classe)/length(trainData$classe),2),"%"))
+```
+
+
+
+###################################################################################################
+##Test section.  
+###Remove columns that are not in the training data set  
+```{r,label="Remove Unused Test Columns", echo = TRUE}
+cnames <- colnames(trainData)
+
+TestData <- TestData[,cnames]
+```
+
+###Predict and check accuracy of each model agains testing data  
+####Rpart (Classification Trees)  
+```{r, label="Predict Classification Trees, Testing Data", echo = TRUE}
+RpartTestPred <- predict(XtrainMod,newdata=TestData)
+
+table(cbind(data.frame(RpartTestPred),data.frame(TestData$classe)))
+
+print(paste("Testing Data Accuracy:",round(100*sum(RpartTestPred==TestData$classe)/length(TestData$classe),2),"%"))
+```
+
+####rf (Random Forest)  
+```{r, label="Predict Random Forest, Testing Data", echo = TRUE}
+RfTestPred <- predict(XtrainMod2,newdata=TestData)
+
+table(cbind(data.frame(RfTestPred),data.frame(TestData$classe)))
+
+print(paste("Testing Data Accuracy:",round(100*sum(RfTestPred == TestData$classe)/length(TestData$classe),2),"%"))
+```
+
+####gbm (Boosting Using Trees)  
+```{r, label="Predict Boosting, Testing Data", echo = TRUE}
+GbmTestPred <- predict(XtrainMod3,newdata=TestData)
+
+table(cbind(data.frame(GbmTestPred),data.frame(TestData$classe)))
+
+print(paste("Testing Data Accuracy:",round(100*sum(GbmTestPred == TestData$classe)/length(TestData$classe),2),"%"))
+```
+
+####treebag (Bagging Using Trees)  
+```{r, label="Predict Bagging, Testing Data", echo = TRUE}
+TreebagTestPred <- predict(XtrainMod4,newdata=TestData)
+
+table(cbind(data.frame(TreebagTestPred),data.frame(TestData$classe)))
+
+print(paste("Testing Data Accuracy:",round(100*sum(TreebagTestPred== TestData$classe)/length(TestData$classe),2),"%"))
+```
+
+
+###################################################################################################
+##Validation section.  
+```{r,label="Load Validation Data",echo=TRUE}
+pmlValidate <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+####Remove columns that are not in the training data set  
+```{r,label="Remove Unused Validation Columns",echo=TRUE}
+ExCols <- colnames(pmlValidate) %in% nms
+
+pmlValidate <- pmlValidate[,!ExCols]
+```
+
+####Create predictions using Random Forest model on validation data  
+```{r,label="Predict on Validation Data",echo=TRUE}
+RfValidPred <- predict(XtrainMod2,newdata=pmlValidate)
+```
+
+####Predictions of classes from validation data  
+```{r,label="Validation Data Predictions",echo=TRUE}
+for(i in 1:length(RfValidPred)) print(paste("Case",i,":",RfValidPred[i]))
+```
+
